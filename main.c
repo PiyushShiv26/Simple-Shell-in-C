@@ -3,15 +3,99 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-
+#include <stdbool.h>
 
 #define MAX_PATH_LENGTH 1024
+
+void echo_tokenize_and_print(const char *input) {
+    int i = 0;
+    int first = 1;
+    int prev_was_space = 1; // Start as true to avoid leading space
+
+    while (input[i]) {
+        // Check for spaces
+        if (input[i] == ' ') {
+            prev_was_space = 1;
+            i++;
+            continue;
+        }
+
+        char token[MAX_PATH_LENGTH] = {0};
+        int j = 0;
+
+        // Handle quoted token
+        if (input[i] == '\'' || input[i] == '"') {
+            char quote = input[i++];
+            while (input[i] && input[i] != quote) {
+                token[j++] = input[i++];
+            }
+            token[j] = '\0';
+            if (input[i] == quote) i++; // Skip closing quote
+        } else {
+            // Handle unquoted token
+            while (input[i] && input[i] != ' ' && input[i] != '\'' && input[i] != '"') {
+                token[j++] = input[i++];
+            }
+            token[j] = '\0';
+        }
+
+        // Only print space if previous character was a space and not the first token
+        if (!first && prev_was_space) printf(" ");
+        printf("%s", token);
+        first = 0;
+        prev_was_space = 0;
+    }
+    printf("\n");
+}
+
+void cat_tokenize_and_print(const char *input) {
+    int i = 0, first = 1;
+    while (input[i]) {
+        // Skip spaces
+        while (input[i] == ' ') i++;
+        if (input[i] == '\0') break;
+
+        char token[MAX_PATH_LENGTH] = {0};
+        int j = 0;
+
+        // Handle quoted token
+        if (input[i] == '\'' || input[i] == '"') {
+            char quote = input[i++];
+            while (input[i] && input[i] != quote) {
+                token[j++] = input[i++];
+            }
+            token[j] = '\0';
+            if (input[i] == quote) i++; // Skip closing quote
+        } else {
+            // Handle unquoted token
+            while (input[i] && input[i] != ' ') {
+                token[j++] = input[i++];
+            }
+            token[j] = '\0';
+        }
+
+        // Print file contents
+        FILE *fp = fopen(token, "r");
+        if (fp) {
+            int c;
+            while ((c = fgetc(fp)) != EOF) {
+                putchar(c);
+            }
+            fclose(fp);
+        } else {
+            printf("cat: %s: No such file or directory\n", token);
+        }
+        first = 0;
+    }
+    fflush(stdout);
+}
 
 int main() {
   // Flush after every printf
   setbuf(stdout, NULL);
   while(1){
   printf("$ ");
+  fflush(stdout);
 
   // Wait for user input
   char input[MAX_PATH_LENGTH];
@@ -20,7 +104,20 @@ int main() {
 
   // exit command
   if (strcmp(input, "exit 0") == 0) break;
+  
+  // cd command
+  if (strncmp(input, "cd ", 3) == 0) {
+    char *path = input + 3;
+    if (strcmp(path, "~") == 0) {
+        path = getenv("HOME");
+    } 
+    if (chdir(path) != 0) {
+        printf("cd: %s: No such file or directory\n", path);
+    }
+    continue;
+  }
 
+  // pwd command
   if (strcmp(input, "pwd") == 0) {
     char cwd[MAX_PATH_LENGTH];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
@@ -33,7 +130,15 @@ int main() {
 
   //echo command
   if (strncmp(input, "echo ", 5) == 0) {
-    printf("%s\n", input + 5);
+    char *message = input + 5;
+    echo_tokenize_and_print(message);
+    continue;
+  }
+
+  // cat command
+  if (strncmp(input, "cat ", 4) == 0) {
+    char *file = input + 4;
+    cat_tokenize_and_print(file);
     continue;
   }
 
